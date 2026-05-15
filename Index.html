@@ -57,6 +57,7 @@
         const IconX = ({size=24, className=""}) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>);
         const IconStar = ({size=24, className="", filled=false}) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>);
         const IconSearch = ({size=24, className=""}) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>);
+        const IconShield = ({size=24, className=""}) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>);
 
         // ==========================================
         // APLIKASI UTAMA (REACT)
@@ -64,10 +65,11 @@
         function App() {
             // State Autentikasi
             const [isLoggedIn, setIsLoggedIn] = useState(false);
-            const [authData, setAuthData] = useState({ name: '', phone: '', role: 'Pekerja / Pencari Kerja' });
+            const [authData, setAuthData] = useState({ phone: '', password: '', role: 'Pekerja / Pencari Kerja' });
             const [userProfile, setUserProfile] = useState({});
             
             // State Data
+            const [allProfiles, setAllProfiles] = useState([]); // Untuk data admin
             const [workers, setWorkers] = useState([]);
             const [jobs, setJobs] = useState([]);
             const [dbStatusMsg, setDbStatusMsg] = useState(isDbReady ? 'Terkoneksi ke Database' : 'Mode Offline (Supabase Belum Diatur)');
@@ -109,24 +111,31 @@
             const fetchData = async () => {
                 if (isDbReady) {
                     try {
-                        const { data: workersData } = await db.from('profiles').select('*').eq('role', 'Pekerja / Pencari Kerja');
-                        if (workersData) setWorkers(workersData);
+                        const { data: allPData } = await db.from('profiles').select('*');
+                        if (allPData) {
+                            setAllProfiles(allPData);
+                            setWorkers(allPData.filter(p => p.role === 'Pekerja / Pencari Kerja'));
+                        }
 
-                        const { data: jobsData } = await db.from('jobs').select('*');
+                        const { data: jobsData } = await db.from('jobs').select('*').order('created_at', { ascending: false });
                         if (jobsData) setJobs(jobsData);
                     } catch (error) {
                         console.error('Gagal memuat data DB:', error);
                     }
                 } else {
                     // DATA DUMMY JIKA SUPABASE BELUM ADA
-                    setWorkers([
-                        { id: 1, name: 'Pak Budi', skill: 'Mencangkul, Tanam Padi', location: 'Dusun Krajan', status: 'Tersedia', phone: '081111', rating: 4.8, reviews_count: 12 },
-                        { id: 2, name: 'Kang Agus', skill: 'Ngabangun, Tukang', location: 'Dusun Sari', status: 'Sedang / Akan Bekerja', phone: '082222', rating: 5.0, reviews_count: 5 },
-                        { id: 3, name: 'Bu Siti', skill: 'Panen, Masak', location: 'Dusun Krajan', status: 'Tersedia', phone: '083333', rating: 4.9, reviews_count: 20 },
-                    ]);
+                    const dummyProfiles = [
+                        { id: 1, name: 'Pak Budi', skill: 'Mencangkul, Tanam Padi', location: 'Dusun Krajan', status: 'Tersedia', phone: '081111', password: '123', rating: 4.8, reviews_count: 12, role: 'Pekerja / Pencari Kerja' },
+                        { id: 2, name: 'Kang Agus', skill: 'Ngabangun, Tukang', location: 'Dusun Sari', status: 'Sedang / Akan Bekerja', phone: '082222', password: '123', rating: 5.0, reviews_count: 5, role: 'Pekerja / Pencari Kerja' },
+                        { id: 3, name: 'Bu Siti', skill: 'Panen, Masak', location: 'Dusun Krajan', status: 'Tersedia', phone: '083333', password: '123', rating: 4.9, reviews_count: 20, role: 'Pekerja / Pencari Kerja' },
+                        { id: 4, name: 'Pak Kades', location: 'Balai Desa', status: 'Tersedia', phone: '084444', password: '123', role: 'Penyedia Kerja' }
+                    ];
+                    setAllProfiles(dummyProfiles);
+                    setWorkers(dummyProfiles.filter(p => p.role === 'Pekerja / Pencari Kerja'));
+                    
                     setJobs([
                         { id: 101, title: 'Butuh 2 orang Panen Padi', provider_name: 'Pak Kades', wage: 'Rp 100.000 / hari', location: 'Sawah Blok C', status: 'Tersedia', created_at: new Date().toISOString() },
-                        { id: 102, title: 'Bantu Ngecor Jalan', provider_name: 'Mas Joko', wage: 'Rp 120.000 / hari', location: 'Proyek Balai Desa', status: 'Tersedia', created_at: new Date().toISOString() },
+                        { id: 102, title: 'Bantu Ngecor Jalan', provider_name: 'Mas Joko', wage: 'Rp 120.000 / hari', location: 'Proyek Balai Desa', status: 'Selesai', created_at: new Date().toISOString() },
                     ]);
                 }
             };
@@ -134,52 +143,73 @@
             // FUNGSI: Login / Daftar
             const handleLogin = async (e) => {
                 e.preventDefault();
-                if (!authData.name || !authData.phone) return;
+                if (!authData.phone || !authData.password) {
+                    showNotification('Harap isi Nomor WA dan Kata Sandi!');
+                    return;
+                }
 
                 if (isDbReady) {
-                    // Cari pengguna berdasarkan no HP
                     const { data, error } = await db.from('profiles').select('*').eq('phone', authData.phone).single();
                     
                     if (data) {
-                        setUserProfile(data); // Sudah terdaftar
+                        // Cek kecocokan password
+                        if (data.password === authData.password) {
+                            setUserProfile(data);
+                        } else {
+                            showNotification('Nomor WA atau Kata Sandi salah!');
+                            return;
+                        }
                     } else {
-                        // Belum terdaftar, buat baru
+                        // Jika Admin login namun belum ada di DB
+                        const nameToUse = authData.role === 'Admin' ? 'Pengelola Desa' : 'Pengguna Baru';
                         const newUser = {
-                            name: authData.name,
+                            name: nameToUse,
                             phone: authData.phone,
+                            password: authData.password,
                             role: authData.role,
                             status: 'Tersedia',
                             rating: 5.0,
                             reviews_count: 0
                         };
-                        const { data: insertedData, error: insertError } = await db.from('profiles').insert([newUser]).select().single();
+                        const { data: insertedData } = await db.from('profiles').insert([newUser]).select().single();
                         if (insertedData) setUserProfile(insertedData);
                     }
                 } else {
-                    // Mode Dummy
-                    setUserProfile({
-                        id: 'dummy-123',
-                        name: authData.name,
-                        phone: authData.phone,
-                        role: authData.role,
-                        location: '-',
-                        skill: '-',
-                        status: 'Tersedia',
-                        rating: 5.0,
-                        reviews_count: 0
-                    });
+                    const existingDummy = allProfiles.find(w => w.phone === authData.phone);
+                    if (existingDummy) {
+                        // Cek password mode offline
+                        if (existingDummy.password === authData.password || authData.password === 'admin') {
+                            setUserProfile(existingDummy);
+                        } else {
+                            showNotification('Nomor WA atau Kata Sandi salah!');
+                            return;
+                        }
+                    } else {
+                        setUserProfile({
+                            id: 'dummy-' + Date.now(),
+                            name: authData.role === 'Admin' ? 'Pengelola Desa' : 'Pengguna Baru',
+                            phone: authData.phone,
+                            password: authData.password,
+                            role: authData.role,
+                            location: '-',
+                            skill: '-',
+                            status: 'Tersedia',
+                            rating: 5.0,
+                            reviews_count: 0
+                        });
+                    }
                 }
                 
                 setIsLoggedIn(true);
-                setActiveTab('home');
-                showNotification(`Selamat datang, ${authData.name}!`);
+                setActiveTab(authData.role === 'Admin' ? 'admin' : 'home');
+                showNotification(authData.role === 'Admin' ? 'Mode Admin Berhasil Diakses!' : `Login berhasil!`);
             };
 
             const handleLogout = () => {
                 setIsLoggedIn(false);
                 setUserProfile({});
                 setActiveTab('home');
-                setAuthData({ name: '', phone: '', role: 'Pekerja / Pencari Kerja' });
+                setAuthData({ phone: '', password: '', role: 'Pekerja / Pencari Kerja' });
                 showNotification('Anda telah berhasil keluar.');
             };
 
@@ -277,16 +307,90 @@
             // Tampilan Layar Utama (Konten)
             const renderContent = () => {
                 switch (activeTab) {
+                    case 'admin':
+                        const totalPekerja = allProfiles.filter(p => p.role === 'Pekerja / Pencari Kerja').length;
+                        const totalPenyedia = allProfiles.filter(p => p.role === 'Penyedia Kerja').length;
+                        const totalJobSelesai = jobs.filter(j => j.status === 'Selesai').length;
+                        
+                        return (
+                            <div className="pb-24 md:pb-8 space-y-6">
+                                <div className="flex justify-between items-center mb-6 border-b border-gray-200 pb-4">
+                                    <div>
+                                        <h2 className="text-2xl font-black text-gray-800">Dashboard Pengelola</h2>
+                                        <p className="text-gray-500 text-sm">Pantau aktivitas dan statistik aplikasi HayuGawe.</p>
+                                    </div>
+                                    <button onClick={fetchData} className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm hover:bg-gray-200">
+                                        Refresh Data
+                                    </button>
+                                </div>
+                                
+                                {/* Kartu Statistik */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                                        <div className="text-gray-500 mb-1 font-bold text-xs uppercase tracking-wider">Total Pekerja</div>
+                                        <div className="text-4xl font-black text-green-600">{totalPekerja}</div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                                        <div className="text-gray-500 mb-1 font-bold text-xs uppercase tracking-wider">Penyedia Kerja</div>
+                                        <div className="text-4xl font-black text-blue-600">{totalPenyedia}</div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                                        <div className="text-gray-500 mb-1 font-bold text-xs uppercase tracking-wider">Total Lowongan</div>
+                                        <div className="text-4xl font-black text-orange-600">{jobs.length}</div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                                        <div className="text-gray-500 mb-1 font-bold text-xs uppercase tracking-wider">Lowongan Selesai</div>
+                                        <div className="text-4xl font-black text-purple-600">{totalJobSelesai}</div>
+                                    </div>
+                                </div>
+
+                                {/* Tabel List / Ringkasan */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                                        <h3 className="font-bold text-gray-800 mb-4 text-lg border-b border-gray-100 pb-3 flex items-center gap-2"><IconUsers size={20}/> Pengguna Terbaru</h3>
+                                        <div className="space-y-3">
+                                            {allProfiles.slice(0, 5).map(p => (
+                                                <div key={p.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                                    <div>
+                                                        <p className="font-bold text-sm text-gray-800">{p.name}</p>
+                                                        <p className="text-xs text-gray-500">{p.phone} • {p.location}</p>
+                                                    </div>
+                                                    <span className={`text-[10px] px-3 py-1 rounded-full font-bold whitespace-nowrap ${p.role.includes('Pekerja') ? 'bg-green-100 text-green-700' : p.role === 'Admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                        {p.role.includes('Pekerja') ? 'Pekerja' : p.role === 'Admin' ? 'Admin' : 'Penyedia'}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                                        <h3 className="font-bold text-gray-800 mb-4 text-lg border-b border-gray-100 pb-3 flex items-center gap-2"><IconBriefcase size={20}/> Lowongan Terbaru</h3>
+                                        <div className="space-y-3">
+                                            {jobs.slice(0, 5).map(j => (
+                                                <div key={j.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                                    <div>
+                                                        <p className="font-bold text-sm text-gray-800">{j.title}</p>
+                                                        <p className="text-xs text-gray-500">Oleh: {j.provider_name}</p>
+                                                    </div>
+                                                    <span className={`text-[10px] px-3 py-1 rounded-full font-bold whitespace-nowrap ${j.status === 'Tersedia' ? 'bg-green-100 text-green-700' : j.status === 'Selesai' ? 'bg-gray-200 text-gray-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                        {j.status}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+
                     case 'home':
                         return (
                             <div className="space-y-6">
                                 {/* AREA BANNER LOGO */}
                                 <div className="w-full rounded-3xl overflow-hidden shadow-sm bg-white border border-gray-100 flex items-center justify-center p-4">
-                                    {/* Jika Anda sudah mengunggah logo ke Github, ubah src ini menjadi: src="./a4557300-bf49-447e-81c2-03ef054f585b.png" */}
                                     <img 
-                                        src="https://images.unsplash.com/photo-1595841696677-6489ff3f8cd1?auto=format&fit=crop&w=1200&q=80" 
+                                        src="https://raw.githubusercontent.com/alfeenstore-POS/hayugawe/refs/heads/main/hayugawe.png.png" 
                                         alt="Banner Hayu Gawe" 
-                                        className="w-full h-auto object-cover max-h-[250px] md:max-h-[400px] rounded-2xl"
+                                        className="w-full h-auto object-contain max-h-[250px] md:max-h-[400px] rounded-2xl"
                                     />
                                 </div>
 
@@ -492,6 +596,11 @@
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="md:col-span-1 space-y-6">
+                                        {userProfile.name === 'Pengguna Baru' && (
+                                            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-2xl text-sm text-yellow-800 shadow-sm animate-pulse">
+                                                <span className="font-bold">⚠️ Perhatian:</span> Anda belum mengatur nama. Silakan klik <b>Ubah Data Profil</b> di bawah untuk melengkapi biodata Anda.
+                                            </div>
+                                        )}
                                         <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 text-center relative overflow-hidden">
                                             <div className="absolute top-0 left-0 w-full h-24 bg-green-600"></div>
                                             <div className="relative w-32 h-32 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-lg mt-4 z-10">
@@ -597,8 +706,7 @@
                             {/* Kiri (Desktop) */}
                             <div className="hidden md:flex w-1/2 bg-green-50 flex-col items-center justify-center p-12 relative">
                                 <div className="z-10 text-center">
-                                    {/* Jika Anda sudah mengunggah logo ke Github, ubah src ini menjadi: src="./a4557300-bf49-447e-81c2-03ef054f585b.png" */}
-                                    <img src="https://images.unsplash.com/photo-1595841696677-6489ff3f8cd1?auto=format&fit=crop&w=600&q=80" alt="Ilustrasi Desa" className="w-full max-w-sm rounded-2xl shadow-xl border-4 border-white mb-8" />
+                                    <img src="https://raw.githubusercontent.com/alfeenstore-POS/hayugawe/refs/heads/main/hayugawe.png.png" alt="Ilustrasi Desa" className="w-full max-w-sm rounded-2xl shadow-xl border-4 border-white mb-8 object-contain bg-white" />
                                     <h2 className="text-3xl font-black text-green-800 mb-3">Pekerjaan Desa,<br/>Rezeki Urang Sadaya.</h2>
                                     <p className="text-green-700 font-medium text-lg">Menghubungkan warga desa untuk gotong royong mencari rezeki.</p>
                                 </div>
@@ -624,12 +732,12 @@
 
                                 <form onSubmit={handleLogin} className="space-y-5">
                                     <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-2">Nama Lengkap</label>
-                                        <input type="text" required placeholder="Contoh: Kang Asep" className="w-full p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-green-500 bg-gray-50" value={authData.name} onChange={e => setAuthData({...authData, name: e.target.value})} />
-                                    </div>
-                                    <div>
                                         <label className="block text-sm font-bold text-gray-700 mb-2">Nomor WhatsApp</label>
                                         <input type="tel" required placeholder="Contoh: 0812xxxx" className="w-full p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-green-500 bg-gray-50" value={authData.phone} onChange={e => setAuthData({...authData, phone: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-2">Kata Sandi (PIN)</label>
+                                        <input type="password" required placeholder="Masukkan kata sandi/PIN rahasia" className="w-full p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-green-500 bg-gray-50" value={authData.password} onChange={e => setAuthData({...authData, password: e.target.value})} />
                                     </div>
                                     <div className="pt-2">
                                         <label className="block text-sm font-bold text-gray-700 mb-3">Tujuan saya...</label>
@@ -646,6 +754,15 @@
                                     </div>
                                     <button type="submit" className="w-full bg-green-600 text-white font-black py-4 rounded-xl hover:bg-green-700 transition mt-6 shadow-lg">Mulai Gunakan HayuGawe</button>
                                 </form>
+
+                                <div className="mt-8 text-center border-t border-gray-100 pt-6">
+                                    <button type="button" onClick={() => {
+                                        setAuthData({ phone: '88888888', password: 'admin', role: 'Admin' });
+                                        showNotification('Mode Login Admin Aktif. Silakan klik Mulai Gunakan.');
+                                    }} className="text-xs text-gray-400 hover:text-green-600 font-bold transition flex items-center justify-center gap-1 mx-auto">
+                                        <IconShield size={14} /> Masuk sebagai Pengelola Desa
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -658,21 +775,31 @@
                     {/* Navbar Atas */}
                     <header className="bg-white shadow-sm sticky top-0 z-40 border-b border-gray-100">
                         <div className="max-w-7xl mx-auto px-4 h-16 sm:h-20 flex items-center justify-between">
-                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('home')}>
+                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab(userProfile.role === 'Admin' ? 'admin' : 'home')}>
                                 <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
                                     <IconUserPlus size={24} className="text-green-700" />
                                 </div>
                                 <h1 className="text-2xl font-black tracking-tight"><span className="text-green-800">Hayu</span><span className="text-yellow-500">Gawe</span></h1>
                             </div>
-                            <div className="hidden md:flex items-center gap-1">
-                                <button onClick={() => setActiveTab('home')} className={`px-5 py-2.5 rounded-lg font-bold text-sm ${activeTab === 'home' ? 'bg-green-50 text-green-700' : 'text-gray-500'}`}>Beranda</button>
-                                <button onClick={() => setActiveTab('workers')} className={`px-5 py-2.5 rounded-lg font-bold text-sm ${activeTab === 'workers' ? 'bg-green-50 text-green-700' : 'text-gray-500'}`}>Daftar Pekerja</button>
-                                <button onClick={() => setActiveTab('jobs')} className={`px-5 py-2.5 rounded-lg font-bold text-sm ${activeTab === 'jobs' ? 'bg-green-50 text-green-700' : 'text-gray-500'}`}>Lowongan Kerja</button>
-                                <div className="w-px h-6 bg-gray-200 mx-2"></div>
-                                <button onClick={() => setActiveTab('profile')} className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm border ${activeTab === 'profile' ? 'bg-white border-green-200 text-green-700 shadow-sm' : 'bg-white border-gray-200 text-gray-700'}`}>
-                                    <IconUser size={18} className={activeTab === 'profile' ? 'text-green-600' : 'text-gray-400'} /> Profil Saya
-                                </button>
-                            </div>
+                            
+                            {/* Navigasi khusus menyesuaikan Peran (Role) */}
+                            {userProfile.role === 'Admin' ? (
+                                <div className="hidden md:flex items-center gap-1">
+                                    <button onClick={() => setActiveTab('admin')} className={`px-5 py-2.5 rounded-lg font-bold text-sm ${activeTab === 'admin' ? 'bg-green-50 text-green-700' : 'text-gray-500'}`}>Dashboard Admin</button>
+                                    <div className="w-px h-6 bg-gray-200 mx-2"></div>
+                                    <button onClick={handleLogout} className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm text-red-500 hover:bg-red-50">Keluar</button>
+                                </div>
+                            ) : (
+                                <div className="hidden md:flex items-center gap-1">
+                                    <button onClick={() => setActiveTab('home')} className={`px-5 py-2.5 rounded-lg font-bold text-sm ${activeTab === 'home' ? 'bg-green-50 text-green-700' : 'text-gray-500'}`}>Beranda</button>
+                                    <button onClick={() => setActiveTab('workers')} className={`px-5 py-2.5 rounded-lg font-bold text-sm ${activeTab === 'workers' ? 'bg-green-50 text-green-700' : 'text-gray-500'}`}>Daftar Pekerja</button>
+                                    <button onClick={() => setActiveTab('jobs')} className={`px-5 py-2.5 rounded-lg font-bold text-sm ${activeTab === 'jobs' ? 'bg-green-50 text-green-700' : 'text-gray-500'}`}>Lowongan Kerja</button>
+                                    <div className="w-px h-6 bg-gray-200 mx-2"></div>
+                                    <button onClick={() => setActiveTab('profile')} className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm border ${activeTab === 'profile' ? 'bg-white border-green-200 text-green-700 shadow-sm' : 'bg-white border-gray-200 text-gray-700'}`}>
+                                        <IconUser size={18} className={activeTab === 'profile' ? 'text-green-600' : 'text-gray-400'} /> Profil Saya
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </header>
 
@@ -743,24 +870,37 @@
 
                     {/* Navbar Bawah (Mobile) */}
                     <nav className="md:hidden bg-white border-t border-gray-200 fixed bottom-0 w-full pb-safe z-40">
-                        <div className="flex justify-around items-center p-2">
-                            <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'home' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
-                                <IconHome size={22} className={activeTab === 'home' ? 'mb-1' : ''} />
-                                <span className={`text-[10px] font-bold ${activeTab === 'home' ? 'block' : 'hidden'}`}>Beranda</span>
-                            </button>
-                            <button onClick={() => setActiveTab('workers')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'workers' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
-                                <IconUsers size={22} className={activeTab === 'workers' ? 'mb-1' : ''} />
-                                <span className={`text-[10px] font-bold ${activeTab === 'workers' ? 'block' : 'hidden'}`}>Pekerja</span>
-                            </button>
-                            <button onClick={() => setActiveTab('jobs')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'jobs' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
-                                <IconBriefcase size={22} className={activeTab === 'jobs' ? 'mb-1' : ''} />
-                                <span className={`text-[10px] font-bold ${activeTab === 'jobs' ? 'block' : 'hidden'}`}>Lowongan</span>
-                            </button>
-                            <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'profile' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
-                                <IconUser size={22} className={activeTab === 'profile' ? 'mb-1' : ''} />
-                                <span className={`text-[10px] font-bold ${activeTab === 'profile' ? 'block' : 'hidden'}`}>Profil</span>
-                            </button>
-                        </div>
+                        {userProfile.role === 'Admin' ? (
+                            <div className="flex justify-around items-center p-2">
+                                <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'admin' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
+                                    <IconShield size={22} className={activeTab === 'admin' ? 'mb-1' : ''} />
+                                    <span className={`text-[10px] font-bold ${activeTab === 'admin' ? 'block' : 'hidden'}`}>Admin</span>
+                                </button>
+                                <button onClick={handleLogout} className="flex flex-col items-center justify-center w-16 h-14 rounded-xl text-red-400 hover:bg-red-50">
+                                    <IconX size={22} />
+                                    <span className="text-[10px] font-bold">Keluar</span>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex justify-around items-center p-2">
+                                <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'home' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
+                                    <IconHome size={22} className={activeTab === 'home' ? 'mb-1' : ''} />
+                                    <span className={`text-[10px] font-bold ${activeTab === 'home' ? 'block' : 'hidden'}`}>Beranda</span>
+                                </button>
+                                <button onClick={() => setActiveTab('workers')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'workers' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
+                                    <IconUsers size={22} className={activeTab === 'workers' ? 'mb-1' : ''} />
+                                    <span className={`text-[10px] font-bold ${activeTab === 'workers' ? 'block' : 'hidden'}`}>Pekerja</span>
+                                </button>
+                                <button onClick={() => setActiveTab('jobs')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'jobs' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
+                                    <IconBriefcase size={22} className={activeTab === 'jobs' ? 'mb-1' : ''} />
+                                    <span className={`text-[10px] font-bold ${activeTab === 'jobs' ? 'block' : 'hidden'}`}>Lowongan</span>
+                                </button>
+                                <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center justify-center w-16 h-14 rounded-xl ${activeTab === 'profile' ? 'text-green-700 bg-green-50' : 'text-gray-400'}`}>
+                                    <IconUser size={22} className={activeTab === 'profile' ? 'mb-1' : ''} />
+                                    <span className={`text-[10px] font-bold ${activeTab === 'profile' ? 'block' : 'hidden'}`}>Profil</span>
+                                </button>
+                            </div>
+                        )}
                     </nav>
                 </div>
             );
