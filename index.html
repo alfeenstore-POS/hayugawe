@@ -148,25 +148,31 @@
                     return;
                 }
 
+                // Jalur Rahasia Admin
+                let appliedRole = authData.role;
+                if (authData.phone === '212212' && authData.password === '001122') {
+                    appliedRole = 'Admin';
+                }
+
                 if (isDbReady) {
                     const { data, error } = await db.from('profiles').select('*').eq('phone', authData.phone).single();
                     
                     if (data) {
                         // Cek kecocokan password
                         if (data.password === authData.password) {
-                            setUserProfile(data);
+                            setUserProfile({...data, role: appliedRole});
                         } else {
                             showNotification('Nomor WA atau Kata Sandi salah!');
                             return;
                         }
                     } else {
-                        // Jika Admin login namun belum ada di DB
-                        const nameToUse = authData.role === 'Admin' ? 'Pengelola Desa' : 'Pengguna Baru';
+                        // Belum terdaftar (buat pengguna baru atau admin)
+                        const nameToUse = appliedRole === 'Admin' ? 'Pengelola Desa' : 'Pengguna Baru';
                         const newUser = {
                             name: nameToUse,
                             phone: authData.phone,
                             password: authData.password,
-                            role: authData.role,
+                            role: appliedRole,
                             status: 'Tersedia',
                             rating: 5.0,
                             reviews_count: 0
@@ -175,34 +181,49 @@
                         if (insertedData) setUserProfile(insertedData);
                     }
                 } else {
-                    const existingDummy = allProfiles.find(w => w.phone === authData.phone);
-                    if (existingDummy) {
-                        // Cek password mode offline
-                        if (existingDummy.password === authData.password || authData.password === 'admin') {
-                            setUserProfile(existingDummy);
-                        } else {
-                            showNotification('Nomor WA atau Kata Sandi salah!');
-                            return;
-                        }
-                    } else {
+                    // Mode Dummy (Offline)
+                    if (appliedRole === 'Admin') {
                         setUserProfile({
-                            id: 'dummy-' + Date.now(),
-                            name: authData.role === 'Admin' ? 'Pengelola Desa' : 'Pengguna Baru',
-                            phone: authData.phone,
-                            password: authData.password,
-                            role: authData.role,
+                            id: 'admin-secret',
+                            name: 'Pengelola Desa',
+                            phone: '212212',
+                            password: '001122',
+                            role: 'Admin',
                             location: '-',
                             skill: '-',
-                            status: 'Tersedia',
+                            status: 'Aktif',
                             rating: 5.0,
                             reviews_count: 0
                         });
+                    } else {
+                        const existingDummy = allProfiles.find(w => w.phone === authData.phone);
+                        if (existingDummy) {
+                            if (existingDummy.password === authData.password) {
+                                setUserProfile(existingDummy);
+                            } else {
+                                showNotification('Nomor WA atau Kata Sandi salah!');
+                                return;
+                            }
+                        } else {
+                            setUserProfile({
+                                id: 'dummy-' + Date.now(),
+                                name: 'Pengguna Baru',
+                                phone: authData.phone,
+                                password: authData.password,
+                                role: appliedRole,
+                                location: '-',
+                                skill: '-',
+                                status: 'Tersedia',
+                                rating: 5.0,
+                                reviews_count: 0
+                            });
+                        }
                     }
                 }
                 
                 setIsLoggedIn(true);
-                setActiveTab(authData.role === 'Admin' ? 'admin' : 'home');
-                showNotification(authData.role === 'Admin' ? 'Mode Admin Berhasil Diakses!' : `Login berhasil!`);
+                setActiveTab(appliedRole === 'Admin' ? 'admin' : 'home');
+                showNotification(appliedRole === 'Admin' ? 'Mode Admin Berhasil Diakses!' : `Login berhasil!`);
             };
 
             const handleLogout = () => {
@@ -754,15 +775,6 @@
                                     </div>
                                     <button type="submit" className="w-full bg-green-600 text-white font-black py-4 rounded-xl hover:bg-green-700 transition mt-6 shadow-lg">Mulai Gunakan HayuGawe</button>
                                 </form>
-
-                                <div className="mt-8 text-center border-t border-gray-100 pt-6">
-                                    <button type="button" onClick={() => {
-                                        setAuthData({ phone: '88888888', password: 'admin', role: 'Admin' });
-                                        showNotification('Mode Login Admin Aktif. Silakan klik Mulai Gunakan.');
-                                    }} className="text-xs text-gray-400 hover:text-green-600 font-bold transition flex items-center justify-center gap-1 mx-auto">
-                                        <IconShield size={14} /> Masuk sebagai Pengelola Desa
-                                    </button>
-                                </div>
                             </div>
                         </div>
                     </div>
