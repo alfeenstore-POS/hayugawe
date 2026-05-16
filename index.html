@@ -5,21 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HayuGawe - Pekerjaan Desa, Rezeki Urang Sadaya</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
-    <!-- Babel (Untuk membaca JSX di browser) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
-        /* Sembunyikan scrollbar untuk kategori */
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         body { background-color: #f9fafb; -webkit-tap-highlight-color: transparent; }
@@ -80,16 +72,16 @@
             const [activeFilter, setActiveFilter] = useState('Semua');
             const filterCategories = ['Semua', 'Mencangkul', 'Ngarit', 'Panen', 'Bangunan', 'Bersih-bersih'];
 
+            // Tambahkan State quota untuk pembuatan pekerjaan baru
             const [showAddJob, setShowAddJob] = useState(false);
-            const [newJob, setNewJob] = useState({ title: '', wage: '', location: '' });
+            const [newJob, setNewJob] = useState({ title: '', wage: '', location: '', quota: 1 });
+            
             const [showAddAd, setShowAddAd] = useState(false);
             const [newAd, setNewAd] = useState({ title: '', description: '', provider_name: '', phone: '', price: '', tier: 'Dasar' });
             
-            const [activeJob, setActiveJob] = useState(null);
-            const [activeProviderJob, setActiveProviderJob] = useState(null);
             const [showRatingModal, setShowRatingModal] = useState(false);
             const [ratingValue, setRatingValue] = useState(5);
-            const [ratingTarget, setRatingTarget] = useState({ type: null, name: null });
+            const [ratingTarget, setRatingTarget] = useState({ type: null, name: null, job_id: null });
 
             const [showEditProfile, setShowEditProfile] = useState(false);
             const [editProfileData, setEditProfileData] = useState({});
@@ -131,8 +123,8 @@
                     setWorkers(dummyProfiles.filter(p => p.role === 'Pekerja / Pencari Kerja'));
                     
                     setJobs([
-                        { id: 101, title: 'Butuh 2 orang Panen Padi', provider_name: 'Pak Kades', wage: 'Rp 100.000 / hari', location: 'Sawah Blok C', status: 'Tersedia', created_at: new Date().toISOString() },
-                        { id: 102, title: 'Bantu Ngecor Jalan', provider_name: 'Mas Joko', wage: 'Rp 120.000 / hari', location: 'Proyek Balai Desa', status: 'Selesai', created_at: new Date().toISOString() },
+                        { id: 101, title: 'Butuh Panen Padi', provider_name: 'Pak Kades', wage: 'Rp 100.000 / hari', location: 'Sawah Blok C', status: 'Tersedia', quota: 4, joined_count: 1, joined_workers: [{id: 2, name: 'Kang Agus'}], created_at: new Date().toISOString() },
+                        { id: 102, title: 'Bantu Ngecor Jalan', provider_name: 'Mas Joko', wage: 'Rp 120.000 / hari', location: 'Proyek Balai Desa', status: 'Selesai', quota: 2, joined_count: 2, joined_workers: [], created_at: new Date().toISOString() },
                     ]);
 
                     setAds([
@@ -280,6 +272,9 @@
                     provider_name: userProfile.name,
                     wage: newJob.wage || '-',
                     location: newJob.location || '-',
+                    quota: newJob.quota || 1,
+                    joined_count: 0,
+                    joined_workers: [],
                     status: 'Tersedia'
                 };
 
@@ -294,8 +289,8 @@
                 }
                 
                 setShowAddJob(false);
-                setNewJob({ title: '', wage: '', location: '' });
-                showNotification('Lowongan pekerjaan berhasil ditambahkan!');
+                setNewJob({ title: '', wage: '', location: '', quota: 1 });
+                showNotification(`Lowongan untuk ${jobData.quota} orang berhasil diposting!`);
             };
 
             const handleAddAd = async (e) => {
@@ -319,35 +314,73 @@
             };
 
             const handleTakeJob = async (job) => {
+                const currentCount = job.joined_count || 0;
+                const quota = job.quota || 1;
+                const workersList = job.joined_workers || [];
+                
+                if (currentCount >= quota) {
+                    showNotification('Maaf, kuota pekerja sudah penuh.');
+                    return;
+                }
+
+                // Menghitung berapa kali akun ini sudah bergabung di pekerjaan yang sama
+                const myEntries = workersList.filter(w => w.id === userProfile.id).length;
+                const displayName = myEntries > 0 ? `${userProfile.name} (Teman/Wakil)` : userProfile.name;
+
+                const updatedCount = currentCount + 1;
+                const updatedWorkers = [...workersList, { id: userProfile.id, name: displayName, phone: userProfile.phone }];
+                const newStatus = updatedCount >= quota ? 'Penuh' : 'Tersedia';
+
                 if (isDbReady) {
-                    await db.from('jobs').update({ status: 'Diambil', worker_id: userProfile.id }).eq('id', job.id);
+                    await db.from('jobs').update({ 
+                        joined_count: updatedCount, 
+                        joined_workers: updatedWorkers, 
+                        status: newStatus 
+                    }).eq('id', job.id);
                     await db.from('profiles').update({ status: 'Sedang / Akan Bekerja' }).eq('id', userProfile.id);
                     fetchData();
                 } else {
-                    setJobs(jobs.map(j => j.id === job.id ? { ...j, status: 'Diambil' } : j));
+                    setJobs(jobs.map(j => j.id === job.id ? { ...j, joined_count: updatedCount, joined_workers: updatedWorkers, status: newStatus } : j));
                 }
                 setUserProfile(prev => ({ ...prev, status: 'Sedang / Akan Bekerja' }));
-                setActiveJob(job);
-                showNotification('Berhasil! Anda telah mengambil pekerjaan ini.');
+                showNotification(`Berhasil! ${displayName} ditambahkan ke pekerjaan ini.`);
             };
 
             const handleFinishJob = async () => {
-                if (isDbReady && activeJob) {
-                    await db.from('jobs').update({ status: 'Selesai' }).eq('id', activeJob.id);
-                    await db.from('profiles').update({ status: 'Tersedia' }).eq('id', userProfile.id);
-                    
-                    if (ratingTarget.type === 'provider' && activeJob.provider_id) {
-                         await db.from('reviews').insert([{ job_id: activeJob.id, reviewer_id: userProfile.id, target_id: activeJob.provider_id, rating: ratingValue }]);
+                const targetJobId = ratingTarget.job_id;
+                
+                if (isDbReady && targetJobId) {
+                    // Update status pekerjaan jadi Selesai
+                    if (ratingTarget.type === 'worker') {
+                        await db.from('jobs').update({ status: 'Selesai' }).eq('id', targetJobId);
+                        
+                        // Membebaskan status semua pekerja yang bergabung di job ini
+                        const relatedJob = jobs.find(j => j.id === targetJobId);
+                        if (relatedJob && relatedJob.joined_workers && relatedJob.joined_workers.length > 0) {
+                            const workerIds = relatedJob.joined_workers.map(w => w.id);
+                            await db.from('profiles').update({ status: 'Tersedia' }).in('id', workerIds);
+                        }
                     }
+
+                    // Hanya pekerja yang memberi rating ke bos di prototipe ini, 
+                    // tapi jika bos menilai pekerja, sistem rating tetap jalan ke ID pertama (simulasi)
+                    const reviewerId = userProfile.id;
+                    const reviewedId = ratingTarget.type === 'provider' ? jobs.find(j=>j.id===targetJobId)?.provider_id : jobs.find(j=>j.id===targetJobId)?.joined_workers[0]?.id;
+
+                    if (reviewedId) {
+                         await db.from('reviews').insert([{ job_id: targetJobId, reviewer_id: reviewerId, target_id: reviewedId, rating: ratingValue }]);
+                    }
+                    
+                    if (ratingTarget.type === 'provider') {
+                        await db.from('profiles').update({ status: 'Tersedia' }).eq('id', userProfile.id);
+                    }
+                    
                     fetchData();
                 }
 
                 setShowRatingModal(false);
                 if (ratingTarget.type === 'provider') {
-                    setActiveJob(null);
                     setUserProfile(prev => ({ ...prev, status: 'Tersedia' }));
-                } else {
-                    setActiveProviderJob(null);
                 }
                 showNotification(`Penilaian ${ratingValue} bintang telah dikirim. Terima kasih!`);
                 setRatingValue(5);
@@ -508,15 +541,15 @@
                                             
                                             <div className="bg-green-800/50 border border-green-500/50 p-4 rounded-xl mb-6">
                                                 <p className="text-green-50 text-sm leading-relaxed">
-                                                    <span className="font-bold text-yellow-400">PENTING:</span> Aplikasi ini hanya merupakan PENGHUBUNG antara Pencari Kerja dan Penyedia Pekerjaan. Segala bentuk transaksi dilanjutkan oleh pihak masing-masing, sesuai kesepakatan dengan penuh tanggung jawab.
+                                                    <span className="font-bold text-yellow-400">PENTING:</span> Aplikasi ini hanya merupakan PENGHUBUNG antara Pencari Kerja dan Penyedia Pekerjaan. Segala bentuk transaksi dilanjutkan oleh pihak masing-masing, sesuai kesepakatan secara bertanggung jawab.
                                                 </p>
                                             </div>
 
                                             <div className="flex flex-col sm:flex-row gap-3">
-                                                <button onClick={() => setActiveTab('workers')} className="bg-white text-green-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-50 transition text-center">
+                                                <button onClick={() => setActiveTab('workers')} className="bg-white text-green-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-50 transition text-center shadow-sm">
                                                     Cari Pekerja
                                                 </button>
-                                                <button onClick={() => setActiveTab('jobs')} className="bg-green-800 text-white px-6 py-3 rounded-xl font-bold border border-green-500 hover:bg-green-900 transition text-center">
+                                                <button onClick={() => setActiveTab('jobs')} className="bg-green-800 text-white px-6 py-3 rounded-xl font-bold border border-green-500 hover:bg-green-900 transition text-center shadow-sm">
                                                     Cari Kerja
                                                 </button>
                                             </div>
@@ -672,15 +705,19 @@
                                         <form onSubmit={handleAddJob} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="md:col-span-2">
                                                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Judul Pekerjaan</label>
-                                                <input type="text" placeholder="Contoh: Kuli Panggul Beras" required className="w-full p-3 border border-gray-300 rounded-xl text-sm" value={newJob.title} onChange={e => setNewJob({...newJob, title: e.target.value})} />
+                                                <input type="text" placeholder="Contoh: Panen Padi Sawah Blok C" required className="w-full p-3 border border-gray-300 rounded-xl text-sm" value={newJob.title} onChange={e => setNewJob({...newJob, title: e.target.value})} />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Upah (Rp)</label>
                                                 <input type="text" placeholder="Contoh: Rp 80.000 / hari" className="w-full p-3 border border-gray-300 rounded-xl text-sm" value={newJob.wage} onChange={e => setNewJob({...newJob, wage: e.target.value})} />
                                             </div>
                                             <div>
+                                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Kebutuhan (Orang)</label>
+                                                <input type="number" min="1" required placeholder="Butuh berapa orang?" className="w-full p-3 border border-gray-300 rounded-xl text-sm" value={newJob.quota} onChange={e => setNewJob({...newJob, quota: parseInt(e.target.value) || 1})} />
+                                            </div>
+                                            <div className="md:col-span-2">
                                                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Lokasi Kerja</label>
-                                                <input type="text" placeholder="Contoh: Gudang Desa" className="w-full p-3 border border-gray-300 rounded-xl text-sm" value={newJob.location} onChange={e => setNewJob({...newJob, location: e.target.value})} />
+                                                <input type="text" placeholder="Contoh: Sawah Belakang Balai Desa" className="w-full p-3 border border-gray-300 rounded-xl text-sm" value={newJob.location} onChange={e => setNewJob({...newJob, location: e.target.value})} />
                                             </div>
                                             <div className="md:col-span-2 mt-2">
                                                 <button type="submit" className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl hover:bg-green-700 transition">Posting Pekerjaan</button>
@@ -690,52 +727,82 @@
                                 )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {jobs.map(job => (
-                                        <div key={job.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <h3 className="font-bold text-xl text-gray-800">{job.title}</h3>
-                                                <span className={`text-xs px-3 py-1.5 rounded-full font-bold whitespace-nowrap ml-2 ${job.status === 'Tersedia' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                    {job.status}
-                                                </span>
-                                            </div>
-                                            
-                                            <div className="flex items-center gap-2 mb-4">
-                                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200">
-                                                    <IconUser size={14} className="text-gray-500" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm text-gray-700 font-bold">{job.provider_name}</p>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 mb-3">
-                                                <span className="block text-orange-800 font-bold text-xs uppercase mb-1">Upah</span>
-                                                <span className="text-orange-600 font-semibold">{job.wage}</span>
-                                            </div>
-                                            <div className="bg-gray-50 p-3 rounded-xl mb-5 flex items-center gap-2">
-                                                <IconMapPin size={16} className="text-gray-400 shrink-0" /> 
-                                                <span className="text-sm text-gray-700 font-medium">{job.location}</span>
-                                            </div>
+                                    {jobs.map(job => {
+                                        const currentCount = job.joined_count || 0;
+                                        const quota = job.quota || 1;
+                                        const isFull = currentCount >= quota || job.status === 'Penuh' || job.status === 'Selesai';
+                                        
+                                        // Cek berapa banyak kursi yang diambil oleh user ini
+                                        const myJoinCount = (job.joined_workers || []).filter(w => w.id === userProfile.id).length;
 
-                                            <div className="mt-auto">
-                                                {userProfile.role === 'Pekerja / Pencari Kerja' && job.status === 'Tersedia' && (
-                                                    <button onClick={() => handleTakeJob(job)} className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-700 transition">
-                                                        Ambil Pekerjaan Ini
-                                                    </button>
-                                                )}
-                                                {userProfile.role !== 'Pekerja / Pencari Kerja' && job.status === 'Tersedia' && (
-                                                    <button disabled className="w-full bg-gray-100 text-gray-400 font-bold py-3 rounded-xl cursor-not-allowed">
-                                                        Hanya Pekerja Yang Bisa Mengambil
-                                                    </button>
-                                                )}
-                                                {job.status !== 'Tersedia' && (
-                                                    <button disabled className="w-full bg-gray-100 text-gray-400 font-bold py-3 rounded-xl cursor-not-allowed">
-                                                        Pekerjaan Telah Diambil
-                                                    </button>
-                                                )}
+                                        return (
+                                            <div key={job.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <h3 className="font-bold text-xl text-gray-800">{job.title}</h3>
+                                                    <span className={`text-xs px-3 py-1.5 rounded-full font-bold whitespace-nowrap ml-2 ${!isFull ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                        {job.status === 'Selesai' ? 'Selesai' : isFull ? 'Penuh' : 'Tersedia'}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-2 mb-4">
+                                                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200">
+                                                        <IconUser size={14} className="text-gray-500" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm text-gray-700 font-bold">{job.provider_name}</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 mb-3 flex justify-between items-center">
+                                                    <div>
+                                                        <span className="block text-orange-800 font-bold text-xs uppercase mb-1">Upah</span>
+                                                        <span className="text-orange-600 font-semibold">{job.wage}</span>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className="block text-orange-800 font-bold text-xs uppercase mb-1">Kuota Terisi</span>
+                                                        <span className="text-orange-600 font-black">{currentCount} / {quota} <span className="font-medium text-sm">Org</span></span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-gray-50 p-3 rounded-xl mb-5 flex items-center gap-2">
+                                                    <IconMapPin size={16} className="text-gray-400 shrink-0" /> 
+                                                    <span className="text-sm text-gray-700 font-medium">{job.location}</span>
+                                                </div>
+
+                                                <div className="mt-auto">
+                                                    {userProfile.role === 'Pekerja / Pencari Kerja' && !isFull && (
+                                                        <button onClick={() => handleTakeJob(job)} className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-700 transition shadow-sm">
+                                                            {myJoinCount > 0 ? `Daftarkan Teman Lain (+1)` : `Bergabung (${currentCount}/${quota})`}
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {userProfile.role === 'Pekerja / Pencari Kerja' && myJoinCount > 0 && job.status !== 'Selesai' && (
+                                                        <div className="text-center text-xs text-green-700 font-bold mt-3">
+                                                            ✅ Anda mendaftarkan {myJoinCount} orang
+                                                        </div>
+                                                    )}
+
+                                                    {userProfile.role === 'Pekerja / Pencari Kerja' && isFull && job.status !== 'Selesai' && (
+                                                        <button disabled className="w-full bg-gray-100 text-gray-400 font-bold py-3 rounded-xl cursor-not-allowed">
+                                                            Kuota Pekerja Penuh
+                                                        </button>
+                                                    )}
+
+                                                    {userProfile.role !== 'Pekerja / Pencari Kerja' && job.status !== 'Selesai' && (
+                                                        <button disabled className="w-full bg-gray-100 text-gray-400 font-bold py-3 rounded-xl cursor-not-allowed">
+                                                            Pekerja: {currentCount}/{quota} Terisi
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {job.status === 'Selesai' && (
+                                                        <button disabled className="w-full bg-gray-100 text-gray-400 font-bold py-3 rounded-xl cursor-not-allowed">
+                                                            Pekerjaan Telah Selesai
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         );
@@ -811,6 +878,16 @@
                         );
 
                     case 'profile':
+                        // Logika dinamis untuk mencari proyek aktif milik user
+                        let myActiveWorkerJob = null;
+                        let myActiveProviderJob = null;
+
+                        if (userProfile.role === 'Pekerja / Pencari Kerja') {
+                            myActiveWorkerJob = jobs.find(j => j.joined_workers && j.joined_workers.some(w => w.id === userProfile.id) && j.status !== 'Selesai');
+                        } else if (userProfile.role === 'Penyedia Kerja') {
+                            myActiveProviderJob = jobs.find(j => j.provider_name === userProfile.name && j.status !== 'Selesai' && (j.joined_count || 0) > 0);
+                        }
+
                         return (
                             <div className="pb-24 md:pb-8">
                                 <div className="flex justify-between items-center mb-6">
@@ -818,7 +895,7 @@
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="md:col-span-1 space-y-6">
-                                        {(userProfile.name === 'Pengguna Baru' || !userProfile.avatar) && (
+                                        {(userProfile.name === 'Pengguna Baru' || !userProfile.avatar) && userProfile.role !== 'Admin' && (
                                             <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-2xl text-sm text-yellow-800 shadow-sm animate-pulse">
                                                 <span className="font-bold">⚠️ Perhatian:</span> Anda diwajibkan mengatur Nama Lengkap dan <b>mengunggah Foto Profil</b>. Silakan klik <b>Ubah Data Profil</b> di bawah.
                                             </div>
@@ -879,38 +956,54 @@
                                         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 min-h-[400px]">
                                             <h3 className="text-xl font-bold text-gray-800 mb-6 border-b border-gray-100 pb-4">Aktivitas Saat Ini</h3>
 
-                                            {userProfile.role === 'Pekerja / Pencari Kerja' && activeJob && (
+                                            {userProfile.role === 'Pekerja / Pencari Kerja' && myActiveWorkerJob && (
                                                 <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6 shadow-sm relative overflow-hidden">
                                                     <div className="absolute top-0 left-0 w-2 h-full bg-orange-500"></div>
-                                                    <h4 className="font-bold text-orange-800 text-sm uppercase mb-4 bg-orange-100 px-3 py-1 rounded-full w-max">Sedang Dikerjakan</h4>
-                                                    <p className="font-black text-gray-800 text-2xl mb-2">{activeJob.title}</p>
-                                                    <p className="text-gray-600 mb-6">Penyedia: <strong>{activeJob.provider_name}</strong></p>
-                                                    <button onClick={() => { setRatingTarget({ type: 'provider', name: activeJob.provider_name }); setShowRatingModal(true); }}
+                                                    <h4 className="font-bold text-orange-800 text-sm uppercase mb-4 bg-orange-100 px-3 py-1 rounded-full w-max">Sedang Bergabung</h4>
+                                                    <p className="font-black text-gray-800 text-2xl mb-2">{myActiveWorkerJob.title}</p>
+                                                    <p className="text-gray-600 mb-6">Penyedia: <strong>{myActiveWorkerJob.provider_name}</strong></p>
+                                                    <button onClick={() => { setRatingTarget({ type: 'provider', name: myActiveWorkerJob.provider_name, job_id: myActiveWorkerJob.id }); setShowRatingModal(true); }}
                                                         className="w-full sm:w-auto bg-orange-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-orange-700 shadow-md transition"
                                                     >
-                                                        Selesaikan & Beri Rating Penyedia
+                                                        Beri Rating Penyedia (Tugas Selesai)
                                                     </button>
                                                 </div>
                                             )}
 
-                                            {userProfile.role === 'Penyedia Kerja' && activeProviderJob && (
+                                            {userProfile.role === 'Penyedia Kerja' && myActiveProviderJob && (
                                                 <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 shadow-sm relative overflow-hidden">
                                                     <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
-                                                    <h4 className="font-bold text-blue-800 text-sm uppercase mb-4 bg-blue-100 px-3 py-1 rounded-full w-max">Proyek Berjalan</h4>
-                                                    <p className="font-black text-gray-800 text-2xl mb-2">{activeProviderJob.title}</p>
-                                                    <p className="text-gray-600 mb-6">Dikerjakan oleh: <strong>{activeProviderJob.worker_name}</strong></p>
-                                                    <button onClick={() => { setRatingTarget({ type: 'worker', name: activeProviderJob.worker_name }); setShowRatingModal(true); }}
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <h4 className="font-bold text-blue-800 text-sm uppercase bg-blue-100 px-3 py-1 rounded-full w-max">Proyek Berjalan</h4>
+                                                        <span className="font-bold text-blue-600 text-sm">{myActiveProviderJob.joined_count} / {myActiveProviderJob.quota} Pekerja</span>
+                                                    </div>
+                                                    <p className="font-black text-gray-800 text-2xl mb-4">{myActiveProviderJob.title}</p>
+                                                    
+                                                    <div className="bg-white p-4 rounded-xl border border-blue-100 mb-6">
+                                                        <p className="text-xs text-gray-500 font-bold uppercase mb-2">Daftar Pekerja Tergabung:</p>
+                                                        <div className="space-y-2">
+                                                            {myActiveProviderJob.joined_workers && myActiveProviderJob.joined_workers.map((w, idx) => (
+                                                                <div key={idx} className="flex justify-between items-center text-sm">
+                                                                    <span className="font-bold text-gray-800">{w.name}</span>
+                                                                    <span className="text-blue-600">{w.phone}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    <button onClick={() => { setRatingTarget({ type: 'worker', name: 'Semua Pekerja', job_id: myActiveProviderJob.id }); setShowRatingModal(true); }}
                                                         className="w-full sm:w-auto bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 shadow-md transition"
                                                     >
-                                                        Tandai Selesai & Nilai Pekerja
+                                                        Tandai Selesai & Bebaskan Pekerja
                                                     </button>
                                                 </div>
                                             )}
 
-                                            {((userProfile.role === 'Pekerja / Pencari Kerja' && !activeJob) || (userProfile.role === 'Penyedia Kerja' && !activeProviderJob) || userProfile.role === 'Admin') && (
+                                            {((userProfile.role === 'Pekerja / Pencari Kerja' && !myActiveWorkerJob) || (userProfile.role === 'Penyedia Kerja' && !myActiveProviderJob) || userProfile.role === 'Admin') && (
                                                 <div className="h-48 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50">
                                                     <IconBriefcase size={48} className="text-gray-300 mb-3" />
                                                     <p className="text-gray-500 font-medium text-lg">Tidak ada aktivitas saat ini.</p>
+                                                    <p className="text-gray-400 text-sm">Cek menu Lowongan untuk melihat daftar pekerjaan.</p>
                                                 </div>
                                             )}
                                         </div>
@@ -991,7 +1084,6 @@
             // LAYAR UTAMA (SETELAH LOGIN)
             return (
                 <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-gray-900">
-                    {/* Navbar Atas */}
                     <header className="bg-white shadow-sm sticky top-0 z-40 border-b border-gray-100">
                         <div className="max-w-7xl mx-auto px-4 h-16 sm:h-20 flex items-center justify-between">
                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab(userProfile.role === 'Admin' ? 'admin' : 'home')}>
@@ -1034,78 +1126,6 @@
                     <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
                         {renderContent()}
                     </main>
-
-                    {/* MODAL EDIT PROFIL */}
-                    {showEditProfile && (
-                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative max-h-[90vh] overflow-y-auto">
-                                <button onClick={() => setShowEditProfile(false)} className="absolute top-5 right-5 text-gray-400"><IconX size={20} /></button>
-                                <h3 className="text-2xl font-black text-gray-800 mb-6 text-center">Ubah Data Profil</h3>
-                                <form onSubmit={handleSaveProfile} className="space-y-5">
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-2">Foto Profil (Wajib)</label>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-16 h-16 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
-                                                {editProfileData.avatar ? (
-                                                    <img src={editProfileData.avatar} alt="Preview" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <IconCamera size={24} className="text-gray-400" />
-                                                )}
-                                            </div>
-                                            <input 
-                                                type="file" 
-                                                accept="image/*" 
-                                                onChange={handlePhotoUpload}
-                                                className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-2">Nama Lengkap</label>
-                                        <input type="text" className="w-full p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-green-500 bg-gray-50" value={editProfileData.name || ''} onChange={e => setEditProfileData({...editProfileData, name: e.target.value})} placeholder="Masukkan nama..." />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-2">Nomor WhatsApp</label>
-                                        <input type="tel" className="w-full p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-green-500 bg-gray-50" value={editProfileData.phone || ''} onChange={e => setEditProfileData({...editProfileData, phone: e.target.value})} placeholder="Contoh: 0812..." />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-2">Lokasi (Dusun/RT/RW)</label>
-                                        <input type="text" className="w-full p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-green-500 bg-gray-50" value={editProfileData.location || ''} onChange={e => setEditProfileData({...editProfileData, location: e.target.value})} placeholder="Contoh: RT 01 / RW 02" />
-                                    </div>
-                                    {userProfile.role === 'Pekerja / Pencari Kerja' && (
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-700 mb-2">Keahlian Saya</label>
-                                            <textarea className="w-full p-4 border-2 border-gray-200 rounded-xl outline-none focus:border-green-500 bg-gray-50 resize-none" rows="3" value={editProfileData.skill || ''} onChange={e => setEditProfileData({...editProfileData, skill: e.target.value})} placeholder="Contoh: Mencangkul, Panen Padi"></textarea>
-                                        </div>
-                                    )}
-                                    <button type="submit" className="w-full bg-green-600 text-white font-black py-4 rounded-xl hover:bg-green-700 transition mt-4">Simpan Perubahan</button>
-                                </form>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* MODAL RATING */}
-                    {showRatingModal && (
-                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative">
-                                <button onClick={() => setShowRatingModal(false)} className="absolute top-5 right-5 text-gray-400"><IconX size={20} /></button>
-                                <h3 className="text-2xl font-black text-center text-gray-800 mb-2">Pekerjaan Selesai! 🎉</h3>
-                                <p className="text-base text-center text-gray-500 mb-8">
-                                    Beri nilai untuk <span className="font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded">{ratingTarget?.name}</span>
-                                </p>
-                                <div className="flex justify-center gap-3 mb-8 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                    {[1, 2, 3, 4, 5].map((star) => (
-                                        <button key={star} onClick={() => setRatingValue(star)} className="focus:outline-none transition-transform hover:scale-125">
-                                            <IconStar size={48} filled={star <= ratingValue} className={star <= ratingValue ? "text-yellow-400 drop-shadow-md" : "text-gray-300"} />
-                                        </button>
-                                    ))}
-                                </div>
-                                <button onClick={handleFinishJob} className="w-full bg-green-600 text-white font-black py-4 rounded-xl hover:bg-green-700 transition shadow-lg text-lg">
-                                    Kirim Penilaian
-                                </button>
-                            </div>
-                        </div>
-                    )}
 
                     {/* Navbar Bawah (Mobile) */}
                     <nav className="md:hidden bg-white border-t border-gray-200 fixed bottom-0 w-full pb-safe z-40">
